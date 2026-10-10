@@ -157,7 +157,7 @@ background:linear-gradient(160deg,hsl(var(--h) 60% 18%),#0b0916 60%,hsl(calc(var
 <section id="history">
   <div class="hbox">
     <h2>Token Graveyard</h2>
-    <p class="sub">Full FIFO cost basis. Realized + unrealized PnL in USD. Peak market caps. Real on-chain data via Helius + DexScreener + GeckoTerminal.</p>
+    <p class="sub">Full FIFO cost basis. Realized + unrealized PnL in USD. Peak prices from DexPaprika OHLCV history. Real on-chain data via Helius + DexScreener + DexPaprika.</p>
 
     <div class="depth-row">
       <div style="display:flex;align-items:center;gap:10px;flex:1">
@@ -197,6 +197,7 @@ const CONFIG = {
 
 const RPC_URL    = `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(CONFIG.HELIUS_KEY)}`;
 const HELIUS_API = `https://api.helius.xyz/v0`;
+const DEXPAPRIKA = `https://api.dexpaprika.com`;
 
 const $ = id => document.getElementById(id);
 document.documentElement.style.setProperty('--h', CONFIG.HUE);
@@ -211,7 +212,7 @@ let data = null;
 let pfpImg = null;
 
 /* ============================================================
-   WALLET LAYER
+   WALLET LAYER (unchanged)
 ============================================================ */
 let wsModule;
 async function loadStandard() {
@@ -289,7 +290,7 @@ async function getAllWallets(){
 }
 
 /* ============================================================
-   PASSPORT CARD
+   PASSPORT CARD (unchanged)
 ============================================================ */
 function hash(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){let s=seed;return()=>{s^=s<<13;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296}}
@@ -450,11 +451,6 @@ function money(n){
   if(n >= 1e3) return s + "$" + (n/1e3).toFixed(1) + "K";
   return s + "$" + n.toFixed(n < 1 ? 4 : 2);
 }
-function sol(n){
-  if(!isFinite(n)) return "0";
-  const s = n < 0 ? "-" : ""; n = Math.abs(n);
-  return s + n.toFixed(n < 1 ? 3 : 2) + " SOL";
-}
 
 $('dl').onclick = () => {
   if(!data) return;
@@ -507,14 +503,14 @@ $('dl').onclick = () => {
 };
 
 /* ============================================================
-   TOKEN GRAVEYARD v2 — FIFO cost basis, realized PnL, USD
+   TOKEN GRAVEYARD v3 — DexPaprika ATH, FIFO, PnL
 ============================================================ */
 
-const QUOTE   = new Set([
+const QUOTE = new Set([
   "So11111111111111111111111111111111111111112",
-  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  // USDC
-  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  // USDT
-  "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"    // mSOL
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+  "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"
 ]);
 const STABLES = new Set([
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
@@ -522,11 +518,11 @@ const STABLES = new Set([
 ]);
 
 const CACHE_TTL = {
-  dex:   6 * 60 * 60 * 1000,   // 6h
-  gecko: 12 * 60 * 60 * 1000,  // 12h
-  sol:   30 * 60 * 1000        // 30min for latest price
+  dex:    6 * 60 * 60 * 1000,
+  ath:    12 * 60 * 60 * 1000,
+  sol:    30 * 60 * 1000
 };
-const CACHE_KEY = { dex:"gy_dex_v2", gecko:"gy_gecko_v2", sol:"gy_solhist_v2", solspot:"gy_solspot_v2" };
+const CACHE_KEY = { dex:"gy_dex_v3", ath:"gy_ath_v3", sol:"gy_sol_v3" };
 
 const DEPTH_LEVELS = [
   {pages: 5,  maxAth: 10, label: "Light"   },
@@ -561,10 +557,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-async function fj(url){
+async function fj(url, headers){
   for(let i=0;i<4;i++){
     let r;
-    try{ r = await fetch(url); }
+    try{ r = await fetch(url, {headers}); }
     catch(e){ await sleep(1200); continue; }
     if(r.status === 429){ await sleep(4000 + i*2000); continue; }
     if(r.status === 404) return null;
@@ -587,26 +583,25 @@ function setProgress(pct, msg){
   $('progtxt').textContent = msg || "";
 }
 
-/* -- SOL price history (CoinGecko public) -- */
+/* -- SOL price history via DexPaprika SOL/USDC pool -- */
+const SOL_USDC_POOL = "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2"; // Raydium SOL/USDC
+
 async function fetchSolHistory(fromMs, toMs){
   const cached = cacheGet(CACHE_KEY.sol, 6*60*60*1000);
   if(cached && cached.from <= fromMs && cached.to >= toMs) return cached.prices;
 
-  const from = Math.floor(fromMs/1000);
-  const to   = Math.floor(Math.min(toMs, Date.now())/1000);
-  // CoinGecko free: max 365 days per request; chunk if needed
-  const chunk = 350 * 24 * 60 * 60 * 1000; // 350 days in ms
+  const startSec = Math.floor(fromMs/1000);
+  const endSec = Math.floor(Math.min(toMs, Date.now())/1000);
+  const url = `${DEXPAPRIKA}/networks/solana/pools/${SOL_USDC_POOL}/ohlcv`
+            + `?start=${startSec}&end=${endSec}&interval=24h&limit=1000`;
+  const j = await fj(url);
   const prices = [];
-  let cur = fromMs;
-  while(cur < toMs){
-    const end = Math.min(cur + chunk, toMs);
-    const url = `https://api.coingecko.com/api/v3/coins/solana/market_chart/range?vs_currency=usd&from=${Math.floor(cur/1000)}&to=${Math.floor(end/1000)}`;
-    try{
-      const j = await fj(url);
-      if(j && j.prices) for(const p of j.prices) prices.push(p);
-    }catch(e){}
-    cur = end + 1;
-    await sleep(2200);
+  if(j && Array.isArray(j)){
+    for(const c of j){
+      // DexPaprika returns { time, open, high, low, close, volume }
+      const ts = new Date(c.time).getTime();
+      prices.push([ts, +c.close]);
+    }
   }
   prices.sort((a,b)=>a[0]-b[0]);
   const payload = {from: fromMs, to: toMs, prices};
@@ -629,18 +624,19 @@ function priceSolAt(prices, ts){
   return a[1] + (b[1] - a[1]) * t;
 }
 async function fetchSolSpot(){
-  const cached = cacheGet(CACHE_KEY.solspot, CACHE_TTL.sol);
-  if(cached) return cached;
+  const cached = cacheGet(CACHE_KEY.sol, CACHE_TTL.sol);
+  if(cached && cached.prices && cached.prices.length){
+    return cached.prices[cached.prices.length-1][1];
+  }
   try{
-    const sr = await fj("https://api.dexscreener.com/tokens/v1/solana/So11111111111111111111111111111111111111112");
-    const best = (sr||[]).sort((a,b)=>((b.liquidity&&b.liquidity.usd)||0)-((a.liquidity&&a.liquidity.usd)||0))[0];
-    const p = best ? +best.priceUsd : 150;
-    cacheSet(CACHE_KEY.solspot, p);
-    return p;
-  }catch(e){ return 150; }
+    const url = `${DEXPAPRIKA}/networks/solana/pools/${SOL_USDC_POOL}/ohlcv?start=${Math.floor(Date.now()/1000)-86400}&interval=1h&limit=1`;
+    const j = await fj(url);
+    if(j && j.length) return +j[j.length-1].close;
+  }catch(e){}
+  return 150;
 }
 
-/* -- Core: fetch all txs -- */
+/* -- Fetch all transactions -- */
 async function fetchAllTxs(wallet, maxPages, onProgress){
   const all = [];
   let before = "";
@@ -656,20 +652,18 @@ async function fetchAllTxs(wallet, maxPages, onProgress){
     if(txs.length < 100) break;
     await sleep(150);
   }
-  // Helius returns newest-first. Sort ascending by timestamp for FIFO.
   all.sort((a,b)=>a.timestamp - b.timestamp);
   return all;
 }
 
-/* -- Build FIFO ledger from txs -- */
+/* -- Build FIFO ledger -- */
 function buildLedger(txs, wallet, solHist){
-  const mints = {}; // mint -> {lots:[], bought, sold, solSpent, solReceived, usdSpent, usdReceived,
-                    //         realizedSol, realizedUsd, buys, sells, first, last, unknownTxs}
+  const mints = {};
   const quoteStables = new Set(STABLES);
 
   for(const tx of txs){
-    const deltas = {};       // mint -> net token amount
-    let stableUsdDelta = 0;  // net USD from stablecoin transfers
+    const deltas = {};
+    let stableUsdDelta = 0;
     let hasStable = false;
 
     for(const t of tx.tokenTransfers || []){
@@ -679,7 +673,7 @@ function buildLedger(txs, wallet, solHist){
         if(t.fromUserAccount === wallet){ stableUsdDelta -= amt; hasStable = true; }
         continue;
       }
-      if(QUOTE.has(t.mint)) continue; // skip SOL/mSOL — tracked via nativeBalanceChange
+      if(QUOTE.has(t.mint)) continue;
       if(t.toUserAccount === wallet)   deltas[t.mint] = (deltas[t.mint]||0) + amt;
       if(t.fromUserAccount === wallet) deltas[t.mint] = (deltas[t.mint]||0) - amt;
     }
@@ -687,10 +681,8 @@ function buildLedger(txs, wallet, solHist){
     const active = Object.keys(deltas).filter(m => Math.abs(deltas[m]) > 0);
     if(!active.length) continue;
 
-    // SOL delta on this wallet
     const nb = (tx.accountData || []).find(a => a.account === wallet);
     const solDelta = nb ? nb.nativeBalanceChange / 1e9 : 0;
-
     const solUsdTx = priceSolAt(solHist, tx.timestamp * 1000);
     const share = solDelta / active.length;
     const stableShare = hasStable ? stableUsdDelta / active.length : null;
@@ -707,35 +699,24 @@ function buildLedger(txs, wallet, solHist){
       o.last  = Math.max(o.last,  tx.timestamp);
 
       const d = deltas[m];
-      // USD value attributed to this mint for this tx:
-      //   prefer stablecoin amount, else SOL delta * solUsd
       let usdValue = null;
       if(stableShare != null && Math.abs(stableShare) > 0.0001) usdValue = Math.abs(stableShare);
       else if(Math.abs(share) > 0.000001) usdValue = Math.abs(share) * solUsdTx;
       else o.unknownTxs++;
 
       if(d > 0){
-        // BUY
-        o.buys++;
-        o.bought += d;
+        o.buys++; o.bought += d;
         const costSol = Math.abs(share) > 0.000001 ? Math.abs(share) : 0;
         const costUsd = usdValue != null ? usdValue : 0;
-        o.solSpent += costSol;
-        o.usdSpent += costUsd;
+        o.solSpent += costSol; o.usdSpent += costUsd;
         o.lots.push({ amount: d, costSol, costUsd, ts: tx.timestamp });
       } else {
-        // SELL
-        o.sells++;
-        const soldAmt = -d;
-        o.sold += soldAmt;
+        o.sells++; const soldAmt = -d; o.sold += soldAmt;
         const recSol = Math.abs(share) > 0.000001 ? Math.abs(share) : 0;
         const recUsd = usdValue != null ? usdValue : 0;
-        o.solReceived += recSol;
-        o.usdReceived += recUsd;
+        o.solReceived += recSol; o.usdReceived += recUsd;
 
-        // FIFO: consume lots
-        let remaining = soldAmt;
-        let costSolConsumed = 0, costUsdConsumed = 0;
+        let remaining = soldAmt, costSolConsumed = 0, costUsdConsumed = 0;
         while(remaining > 1e-12 && o.lots.length){
           const lot = o.lots[0];
           const take = Math.min(lot.amount, remaining);
@@ -756,15 +737,14 @@ function buildLedger(txs, wallet, solHist){
   return mints;
 }
 
-/* -- Fetch market data (DexScreener + GeckoTerminal ATH) -- */
+/* -- Fetch market data + ATH via DexPaprika -- */
 async function fetchMarketData(mintsArr, maxAth, onProgress){
   const dexCache = cacheGet(CACHE_KEY.dex, CACHE_TTL.dex) || {};
-  const geckoCache = cacheGet(CACHE_KEY.gecko, CACHE_TTL.gecko) || {};
+  const athCache = cacheGet(CACHE_KEY.ath, CACHE_TTL.ath) || {};
   const info = {};
-  const toFetch = mintsArr.filter(m => !dexCache[m]);
-  const hits = mintsArr.filter(m => dexCache[m]);
 
-  for(const m of hits) info[m] = dexCache[m];
+  const toFetch = mintsArr.filter(m => !dexCache[m]);
+  for(const m of mintsArr) if(dexCache[m]) info[m] = dexCache[m];
 
   for(let i = 0; i < toFetch.length; i += 30){
     const slice = toFetch.slice(i, i+30);
@@ -786,29 +766,38 @@ async function fetchMarketData(mintsArr, maxAth, onProgress){
     }catch(e){}
     await sleep(320);
   }
-  // merge cache
   mergeCache(CACHE_KEY.dex, info);
 
-  // Now GeckoTerminal ATH for top-N (by activity)
+  // ATH via DexPaprika pool OHLCV
   const ranked = mintsArr
     .filter(m => info[m] && info[m].pair)
     .slice(0, maxAth);
   let done = 0;
   for(const m of ranked){
     const inf = info[m];
-    if(geckoCache[inf.pair]){ inf.ath = geckoCache[inf.pair].ath; done++; continue; }
+    const cachedAth = athCache[inf.pair];
+    if(cachedAth !== undefined){ inf.ath = cachedAth; done++; continue; }
     onProgress && onProgress(done, ranked.length, m);
     try{
-      const j = await fj(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${inf.pair}/ohlcv/day?aggregate=1&limit=1000&currency=usd`);
-      const list = (j && j.data && j.data.attributes && j.data.attributes.ohlcv_list) || [];
-      if(list.length) inf.ath = Math.max(inf.price, ...list.map(c => c[2]));
-      else inf.ath = inf.price;
-      geckoCache[inf.pair] = { ath: inf.ath };
-    }catch(e){ inf.ath = inf.price; }
+      const start = Math.floor(Date.now()/1000) - (365*24*3600); // 1 year
+      const url = `${DEXPAPRIKA}/networks/solana/pools/${inf.pair}/ohlcv`
+                + `?start=${start}&interval=24h&limit=366`;
+      const j = await fj(url);
+      if(j && Array.isArray(j) && j.length){
+        inf.ath = Math.max(inf.price, ...j.map(c => +c.high));
+      } else {
+        inf.ath = inf.price;
+        inf.athError = "no candles";
+      }
+    }catch(e){
+      inf.ath = inf.price;
+      inf.athError = e.message;
+    }
+    athCache[inf.pair] = inf.ath;
     done++;
-    await sleep(2200);
+    await sleep(300); // DexPaprika is generous but be polite
   }
-  try{ localStorage.setItem(CACHE_KEY.gecko, JSON.stringify({data: geckoCache, ts: Date.now()})); }catch(e){}
+  cacheSet(CACHE_KEY.ath, athCache);
   return info;
 }
 
@@ -856,12 +845,11 @@ $('scan').onclick = async () => {
 
     setProgress(42, `Found ${mintsArr.length} tokens. Fetching prices…`);
     const info = await fetchMarketData(mintsArr, depth.maxAth, (d, total, m) => {
-      setProgress(50 + (d/total) * 45, `Peak lookups… ${d+1}/${total} (${m.slice(0,4)}…)`);
+      setProgress(50 + (d/total) * 45, `ATH lookups… ${d+1}/${total} (${m.slice(0,4)}…)`);
     });
 
     setProgress(96, "Crunching numbers…");
 
-    // Aggregate rows
     let totalRealizedUsd = 0, totalUnrealizedUsd = 0, totalFumbled = 0;
     let totalCostUsd = 0, totalRealizedSol = 0;
 
@@ -872,22 +860,18 @@ $('scan').onclick = async () => {
       const supply = (inf && inf.price > 0 && inf.mc > 0) ? inf.mc / inf.price : 0;
       const athMc  = (inf && inf.ath && supply) ? inf.ath * supply : 0;
 
-      // Held tokens = sum of remaining lots
-      let heldAmount = 0, heldCostSol = 0, heldCostUsd = 0;
-      for(const lot of o.lots){ heldAmount += lot.amount; heldCostSol += lot.costSol; heldCostUsd += lot.costUsd; }
+      let heldAmount = 0, heldCostUsd = 0;
+      for(const lot of o.lots){ heldAmount += lot.amount; heldCostUsd += lot.costUsd; }
 
-      // Fumble = what sold tokens would be worth at ATH, minus what you got
       const sold = o.sold;
       const gotUsd = o.usdReceived;
       const fumble = (inf && inf.ath && sold > 0)
         ? Math.max(0, sold * inf.ath - gotUsd)
         : 0;
 
-      // Unrealized PnL (only if we can value held tokens)
       const heldValueUsd = heldAmount * currentPrice;
       const unrealizedUsd = heldValueUsd - heldCostUsd;
 
-      // Status
       let st = "SOLD", cls = "c-sold";
       if(!inf || inf.price === 0){ st = "DEAD"; cls = "c-dead"; }
       else if(heldAmount > 0){
@@ -911,7 +895,6 @@ $('scan').onclick = async () => {
     window.FUMBLED = totalFumbled;
     if(totalFumbled > 0) $('fum').textContent = "💀 FUMBLED ~" + money(totalFumbled);
 
-    // Portfolio grade
     const totalPnlUsd = totalRealizedUsd + totalUnrealizedUsd;
     const roi = totalCostUsd > 0 ? totalPnlUsd / totalCostUsd : 0;
     let grade = "F";
@@ -928,7 +911,7 @@ $('scan').onclick = async () => {
     setProgress(100, `Done. ${txs.length} txs · ${rows.length} tokens.`);
     setTimeout(()=>setProgress(null), 1500);
 
-    hs(`Scanned ${txs.length} txs (${depth.label} depth). Cost basis via FIFO, USD converted using historical SOL price at each trade timestamp.`);
+    hs(`Scanned ${txs.length} txs (${depth.label} depth). ATH via DexPaprika OHLCV. Cost basis FIFO, USD converted at trade-time SOL price.`);
   }catch(e){
     console.error(e);
     hs("Scan failed: " + e.message, true);
@@ -937,7 +920,7 @@ $('scan').onclick = async () => {
   $('scan').disabled = false;
 };
 
-/* -- Render results with filters + sort -- */
+/* -- Render results -- */
 function renderResults(rows, totals){
   const held = rows.filter(r => r.st === "HELD" || r.st === "BAGGED").length;
   const wins = rows.filter(r => r.realizedUsd > 0).length;
@@ -1002,14 +985,12 @@ function renderList(){
   const list = $('list'); if(!list) return;
   let rows = currentRows.slice();
 
-  // Filter
   if(currentFilter === 'held')    rows = rows.filter(r => r.st === "HELD" || r.st === "BAGGED");
   if(currentFilter === 'sold')    rows = rows.filter(r => r.st === "SOLD" || r.st === "DEAD");
   if(currentFilter === 'win')     rows = rows.filter(r => r.realizedUsd > 0);
   if(currentFilter === 'loss')    rows = rows.filter(r => r.realizedUsd < 0);
   if(currentFilter === 'fumble')  rows = rows.filter(r => r.fumble > 100);
 
-  // Sort
   if(currentSort === 'pnl')     rows.sort((a,b) => (b.realizedUsd + b.unrealizedUsd) - (a.realizedUsd + a.unrealizedUsd));
   if(currentSort === 'fumble')  rows.sort((a,b) => b.fumble - a.fumble);
   if(currentSort === 'ath')     rows.sort((a,b) => b.athMc - a.athMc);
@@ -1029,9 +1010,7 @@ function renderList(){
 
     const pnlUsd = r.realizedUsd + r.unrealizedUsd;
     const pnlCls = pnlUsd >= 0 ? "pos" : "neg";
-    const pnlLabel = pnlUsd >= 0 ? "PnL" : "PnL";
     const fumbleLabel = r.fumble > 100 ? `−${money(r.fumble)}` : (pnlUsd < 0 ? "loss" : "—");
-    const fumbleCls = r.fumble > 100 ? "neg" : (pnlUsd < 0 ? "neg" : "");
 
     const firstDate = new Date(r.o.first * 1000).toLocaleDateString();
     const lastDate  = new Date(r.o.last  * 1000).toLocaleDateString();
@@ -1045,14 +1024,14 @@ function renderList(){
         </div>
         <div class="hf ${pnlCls}">
           <b>${pnlUsd>=0?'+':''}${money(pnlUsd)}</b>
-          <span>${fumbleLabel !== "—" && fumbleLabel !== "loss" ? "FUMBLED "+fumbleLabel : pnlLabel}</span>
+          <span>${fumbleLabel !== "—" && fumbleLabel !== "loss" ? "FUMBLED "+fumbleLabel : "PnL"}</span>
         </div>
       </div>
       <div class="hdetail">
         <div class="dgrid">
-          <div>Bought: <b>${r.o.bought.toLocaleString(undefined,{maximumFractionDigits:2})}</b> tokens</div>
-          <div>Sold: <b>${r.o.sold.toLocaleString(undefined,{maximumFractionDigits:2})}</b> tokens</div>
-          <div>Held: <b>${r.heldAmount.toLocaleString(undefined,{maximumFractionDigits:2})}</b> tokens</div>
+          <div>Bought: <b>${r.o.bought.toLocaleString(undefined,{maximumFractionDigits:2})}</b></div>
+          <div>Sold: <b>${r.o.sold.toLocaleString(undefined,{maximumFractionDigits:2})}</b></div>
+          <div>Held: <b>${r.heldAmount.toLocaleString(undefined,{maximumFractionDigits:2})}</b></div>
           <div>Cost basis: <b>${money(r.o.usdSpent)}</b></div>
           <div>Proceeds: <b>${money(r.o.usdReceived)}</b></div>
           <div>Realized PnL: <b style="color:${r.realizedUsd>=0?'#7dffb0':'#ff7a90'}">${r.realizedUsd>=0?'+':''}${money(r.realizedUsd)}</b></div>
@@ -1062,10 +1041,12 @@ function renderList(){
           <div>Current mcap: <b>${r.inf?money(r.inf.mc):"dead"}</b></div>
           <div>First trade: <b>${firstDate}</b></div>
           <div>Last trade: <b>${lastDate}</b></div>
+          ${r.inf && r.inf.athError ? `<div style="color:#ff7a90">ATH: ${r.inf.athError}</div>` : ""}
         </div>
         <div style="margin-top:8px">
-          <a href="https://solscan.io/token/${r.mint}" target="_blank" style="color:hsl(var(--h) 90% 70%)">View on Solscan ↗</a>
+          <a href="https://solscan.io/token/${r.mint}" target="_blank" style="color:hsl(var(--h) 90% 70%)">Solscan ↗</a>
           ${r.inf && r.inf.pair ? ` · <a href="https://dexscreener.com/solana/${r.inf.pair}" target="_blank" style="color:hsl(var(--h) 90% 70%)">DexScreener ↗</a>` : ""}
+          ${r.inf && r.inf.pair ? ` · <a href="https://www.dexpaprika.com/networks/solana/pools/${r.inf.pair}" target="_blank" style="color:hsl(var(--h) 90% 70%)">DexPaprika ↗</a>` : ""}
         </div>
       </div>
     </div>`;
@@ -1073,7 +1054,7 @@ function renderList(){
 }
 
 /* ============================================================
-   CARD TILT
+   CARD TILT / STARFIELD / BURST (unchanged)
 ============================================================ */
 const card = $('card');
 function tilt(e){
@@ -1095,9 +1076,6 @@ card.addEventListener('pointerleave', () => {
   card.classList.add('idle');
 });
 
-/* ============================================================
-   STARFIELD + BURST
-============================================================ */
 const cv = $('stars'), cx2 = cv.getContext('2d');
 let S = [], B = [];
 function size(){
@@ -1131,9 +1109,7 @@ function burst(){
   requestAnimationFrame(loop);
 })();
 
-/* ============================================================
-   PREVIEW CARD
-============================================================ */
+/* PREVIEW CARD */
 data = build("preview-" + CONFIG.PROJECT);
 render();
 data = null;
