@@ -1,0 +1,1145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Holder Passport</title>
+<style>
+:root{--h:275;--bg:#07060d;--fg:#f4f1ff;--mut:#8b86a8}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow-x:hidden}
+#stars{position:fixed;inset:0;z-index:0}
+main{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:28px 18px 60px;display:grid;gap:28px;grid-template-columns:1fr;justify-items:center}
+@media(min-width:860px){main{grid-template-columns:1fr 1fr;align-items:center;min-height:100vh}}
+.panel{width:100%;max-width:420px}
+.eyebrow{letter-spacing:.3em;font-size:11px;color:hsl(var(--h) 90% 70%);text-transform:uppercase}
+h1{font-size:clamp(34px,7vw,52px);line-height:1;margin:10px 0 12px;font-weight:900;background:linear-gradient(120deg,#fff,hsl(var(--h) 95% 70%),#7df9ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+p.sub{color:var(--mut);line-height:1.5;margin-bottom:22px}
+.step{display:flex;gap:12px;align-items:center;margin:12px 0;opacity:.45;transition:.3s}
+.step.on{opacity:1}
+.step .n{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;border:1px solid hsl(var(--h) 80% 60%);flex:none}
+.step.done .n{background:hsl(var(--h) 80% 55%);color:#000}
+button,input,select{font:inherit}
+.btn{width:100%;padding:14px 16px;border-radius:14px;border:0;font-weight:800;cursor:pointer;color:#0a0814;background:linear-gradient(120deg,hsl(var(--h) 95% 70%),#7df9ff);transition:transform .15s,box-shadow .2s;box-shadow:0 8px 30px hsl(var(--h) 90% 55%/.35)}
+.btn:hover{transform:translateY(-2px)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid #ffffff30;box-shadow:none}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.field{display:flex;align-items:center;background:#ffffff0d;border:1px solid #ffffff22;border-radius:14px;padding:0 14px;flex:1}
+.field span{color:var(--mut)}
+.field input{background:none;border:0;outline:0;color:var(--fg);padding:14px 6px;width:100%}
+.stack{display:grid;gap:10px;margin-top:14px}
+.note{font-size:12px;color:var(--mut);margin-top:12px;line-height:1.5;min-height:18px}
+.err{color:#ff7a90}
+/* CARD */
+.stage{perspective:1000px;width:100%;display:grid;place-items:center}
+.card{--rx:0deg;--ry:0deg;--mx:50%;--my:50%;width:min(86vw,340px);aspect-ratio:4/5;border-radius:22px;position:relative;transform:rotateX(var(--rx)) rotateY(var(--ry));transition:transform .15s;transform-style:preserve-3d;padding:18px;display:flex;flex-direction:column;overflow:hidden;
+background:linear-gradient(160deg,hsl(var(--h) 60% 18%),#0b0916 60%,hsl(calc(var(--h) + 60) 70% 14%));border:1.5px solid hsl(var(--h) 90% 65%/.7);box-shadow:0 30px 80px hsl(var(--h) 90% 50%/.35),inset 0 0 40px hsl(var(--h) 90% 60%/.15)}
+.card.idle{animation:float 5s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-8px) rotateY(6deg)}}
+.holo{position:absolute;inset:0;pointer-events:none;mix-blend-mode:color-dodge;opacity:.55;background:radial-gradient(circle at var(--mx) var(--my),#fff9 0,transparent 35%),linear-gradient(115deg,transparent 20%,#ff6ad566 35%,#7df9ff66 50%,#ffe66d55 65%,transparent 80%);background-size:100% 100%,250% 250%;background-position:center,var(--mx) var(--my)}
+.top{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.2em;color:hsl(var(--h) 90% 80%);font-weight:700}
+.pfpw{margin:14px auto 10px;width:46%;aspect-ratio:1;border-radius:50%;padding:4px;background:conic-gradient(from 0deg,hsl(var(--h) 100% 70%),#7df9ff,#ffe66d,hsl(var(--h) 100% 70%));animation:spin 8s linear infinite}
+@keyframes spin{to{filter:hue-rotate(360deg)}}
+.pfp{width:100%;height:100%;border-radius:50%;background:#14112a center/cover;display:grid;place-items:center;font-size:42px;font-weight:900}
+.hd{text-align:center;font-size:22px;font-weight:900}
+.wl{text-align:center;color:var(--mut);font-size:12px;font-family:ui-monospace,monospace;margin-top:2px}
+.tier{align-self:center;margin:10px 0;padding:5px 14px;border-radius:99px;font-size:11px;letter-spacing:.25em;font-weight:900;color:#0a0814;background:linear-gradient(120deg,hsl(var(--h) 95% 70%),#7df9ff)}
+.stats{display:grid;gap:7px;margin-top:auto}
+.st{display:grid;grid-template-columns:92px 1fr 28px;gap:8px;align-items:center;font-size:10px;letter-spacing:.12em;color:#cfc9ee}
+.bar{height:6px;border-radius:9px;background:#ffffff18;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,hsl(var(--h) 95% 65%),#7df9ff);transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.foot{display:flex;justify-content:space-between;margin-top:12px;font-size:10px;color:var(--mut);letter-spacing:.15em}
+.verified{display:none;color:#7dffb0}
+.card.signed .verified{display:inline}
+.cfum{text-align:center;font-size:12px;font-weight:800;color:#ff7a90;letter-spacing:.1em}
+#history{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:0 18px 80px}
+.hbox{background:#ffffff08;border:1px solid #ffffff1c;border-radius:20px;padding:18px}
+.hbox h2{font-size:22px;font-weight:900;margin-bottom:4px}
+.hbox .sub{margin-bottom:14px}
+.hrow{display:grid;grid-template-columns:36px 1fr auto;gap:12px;align-items:center;padding:12px 0;cursor:pointer;transition:.15s}
+.hwrap{border-top:1px solid #ffffff12}
+.hwrap:first-of-type{border-top:0}
+.hrow:hover{background:#ffffff08}
+.hrow img,.hrow .ic{width:36px;height:36px;border-radius:50%;background:#14112a;display:grid;place-items:center;font-weight:800;object-fit:cover}
+.hs{font-weight:800}
+.hm{font-size:12px;color:var(--mut);margin-top:2px}
+.hf{text-align:right;font-size:14px;color:var(--mut)}
+.hf b{display:block}
+.hf.pos b{color:#7dffb0}
+.hf.neg b{color:#ff7a90}
+.hf span{display:block;font-size:10px;color:var(--mut);letter-spacing:.1em}
+.hdetail{display:none;padding:0 0 14px 48px;font-size:12px;color:var(--mut);line-height:1.6}
+.hwrap.open .hdetail{display:block}
+.hdetail .dgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 16px}
+.hdetail .dgrid b{color:var(--fg);font-family:ui-monospace,monospace}
+.chip{font-size:9px;letter-spacing:.15em;padding:2px 7px;border-radius:99px;margin-left:6px;vertical-align:middle;font-weight:800}
+.c-held{background:#7dffb022;color:#7dffb0}.c-sold{background:#ffe66d22;color:#ffe66d}.c-dead{background:#ff7a9022;color:#ff7a90}.c-bag{background:#ff7a9022;color:#ff7a90}
+.sumrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 14px}
+.sumrow div{background:#ffffff0d;border-radius:14px;padding:12px;text-align:center}
+.sumrow b{display:block;font-size:20px}
+.sumrow span{font-size:10px;color:var(--mut);letter-spacing:.12em}
+.hbox .field{margin-bottom:10px}
+.hbox input[type="range"]{width:100%;accent-color:hsl(var(--h) 90% 60%)}
+.depth-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-bottom:10px}
+.depth-row span{font-size:11px;color:var(--mut);font-family:ui-monospace,monospace}
+.progress{height:4px;background:#ffffff10;border-radius:99px;overflow:hidden;margin-top:12px;display:none}
+.progress.show{display:block}
+.progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,hsl(var(--h) 95% 65%),#7df9ff);transition:width .3s;box-shadow:0 0 12px hsl(var(--h) 90% 60%/.6)}
+.progress-txt{font-size:11px;color:var(--mut);margin-top:6px;font-family:ui-monospace,monospace;min-height:14px}
+/* HERO */
+.hero{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;background:linear-gradient(135deg,#ffffff0a,#ffffff04);border:1px solid #ffffff1c;border-radius:18px;padding:16px;margin:14px 0}
+.hero .grade{width:70px;height:70px;border-radius:50%;display:grid;place-items:center;font-size:32px;font-weight:900;background:linear-gradient(135deg,hsl(var(--h) 95% 60%),#7df9ff);color:#0a0814;box-shadow:0 10px 30px hsl(var(--h) 90% 50%/.4);font-family:ui-monospace,monospace}
+.hero .hmeta{font-size:11px;color:var(--mut);letter-spacing:.1em;text-transform:uppercase}
+.hero .hval{font-size:22px;font-weight:900;font-family:ui-monospace,monospace;margin-top:2px}
+.hero .hval.pos{color:#7dffb0}.hero .hval.neg{color:#ff7a90}
+.hero .hsub{font-size:11px;color:var(--mut);margin-top:2px}
+.hero-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:0 0 14px}
+@media(min-width:640px){.hero-stats{grid-template-columns:repeat(4,1fr)}}
+.hstat{background:#ffffff08;border:1px solid #ffffff14;border-radius:14px;padding:12px}
+.hstat b{display:block;font-size:18px;font-weight:900;font-family:ui-monospace,monospace}
+.hstat span{font-size:9px;color:var(--mut);letter-spacing:.14em;text-transform:uppercase}
+.hstat.pos b{color:#7dffb0}.hstat.neg b{color:#ff7a90}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 6px}
+.filter{padding:6px 12px;border-radius:99px;border:1px solid #ffffff22;background:#ffffff0a;color:var(--mut);font-size:11px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:.15s}
+.filter:hover{background:#ffffff14}
+.filter.on{background:hsl(var(--h) 90% 60%);color:#0a0814;border-color:transparent}
+/* MODAL */
+.modal{position:fixed;inset:0;background:#000000b8;backdrop-filter:blur(6px);display:none;place-items:center;z-index:20;padding:20px}
+.modal.show{display:grid}
+.mcard{width:100%;max-width:360px;background:#0e0b1a;border:1px solid #ffffff22;border-radius:20px;padding:18px;display:grid;gap:10px;box-shadow:0 30px 90px #000}
+.mcard h3{font-size:15px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:hsl(var(--h) 90% 75%);margin-bottom:2px}
+.wbtn{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#ffffff0d;border:1px solid #ffffff1c;color:var(--fg);font-weight:700;cursor:pointer;text-align:left;width:100%;transition:.15s}
+.wbtn:hover{background:#ffffff18;transform:translateY(-1px)}
+.wbtn img,.wbtn .wic{width:28px;height:28px;border-radius:8px;object-fit:cover;flex:none;display:grid;place-items:center;background:#221c3c;font-weight:900;font-size:13px}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<main>
+  <section class="panel">
+    <div class="eyebrow" id="eyebrow">Holder Passport</div>
+    <h1 id="title">Prove you were here.</h1>
+    <p class="sub" id="sub">Connect your wallet, link your X, and forge a one-of-one holographic passport. Rarity is decided by your wallet. Nobody can fake it.</p>
+
+    <div class="step on" id="s1"><div class="n">1</div><div>Connect a wallet</div></div>
+    <div class="step" id="s2"><div class="n">2</div><div>Link your X handle</div></div>
+    <div class="step" id="s3"><div class="n">3</div><div>Sign to forge your card</div></div>
+
+    <div class="stack">
+      <button class="btn" id="connect">Connect Wallet</button>
+      <div class="field"><span>@</span><input id="handle" placeholder="your_x_handle" autocapitalize="off" autocomplete="off" spellcheck="false" disabled></div>
+      <button class="btn" id="forge" disabled>Forge my passport</button>
+      <div class="row">
+        <button class="btn ghost" id="dl" disabled>Download PNG</button>
+        <button class="btn ghost" id="share" disabled>Post to X</button>
+      </div>
+    </div>
+    <div class="note" id="note"></div>
+  </section>
+
+  <section class="stage">
+    <div class="card idle" id="card">
+      <div class="holo"></div>
+      <div class="top"><span id="proj">PROJECT</span><span id="ser">#0000</span></div>
+      <div class="pfpw"><div class="pfp" id="pfp">?</div></div>
+      <div class="hd" id="hd">@anon</div>
+      <div class="wl" id="wl">wallet not connected</div>
+      <div class="tier" id="tier">UNREVEALED</div>
+      <div class="cfum" id="fum"></div>
+      <div class="stats" id="stats"></div>
+      <div class="foot"><span id="ticker">$TICKER</span><span class="verified">✓ SIGNED ON-CHAIN KEY</span></div>
+    </div>
+  </section>
+</main>
+
+<section id="history">
+  <div class="hbox">
+    <h2>Token Graveyard</h2>
+    <p class="sub">Full FIFO cost basis. Realized + unrealized PnL in USD. Peak market caps. Real on-chain data via Helius + DexScreener + GeckoTerminal.</p>
+
+    <div class="depth-row">
+      <div style="display:flex;align-items:center;gap:10px;flex:1">
+        <input type="range" id="depth" min="1" max="5" step="1" value="2">
+        <span id="depthlabel">Depth: Normal</span>
+      </div>
+      <button class="btn" id="scan" style="width:auto;padding:12px 18px" disabled>Scan</button>
+    </div>
+    <div class="progress" id="prog"><i></i></div>
+    <div class="progress-txt" id="progtxt"></div>
+    <div class="note" id="hnote"></div>
+    <div id="hres"></div>
+  </div>
+</section>
+
+<div class="modal" id="modal">
+  <div class="mcard">
+    <h3>Connect a wallet</h3>
+    <div id="walletlist" style="display:grid;gap:8px"></div>
+    <button class="btn ghost" id="modalclose" style="margin-top:4px">Cancel</button>
+  </div>
+</div>
+
+<script>
+/* ===== EDIT THESE TO RESKIN FOR ANY PROJECT ===== */
+const CONFIG = {
+  PROJECT: "YOUR PROJECT",
+  TICKER: "$TICKER",
+  HUE: 275,
+  HELIUS_KEY: "fa7e6515-19de-45de-a7d1-35a64a0d9a1a",
+  SHARE_URL: location.href.startsWith("http") ? location.href : "https://yourproject.xyz",
+  SHARE_TEXT: (tier, serial, ticker) =>
+    `Just forged my ${tier} Holder Passport #${serial} 🔥\nWhat tier are you? Connect your wallet and find out 👇`,
+  STATS: ["DIAMOND HANDS","DEGEN ENERGY","LUCK","MEME POWER"]
+};
+/* ================================================= */
+
+const RPC_URL    = `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(CONFIG.HELIUS_KEY)}`;
+const HELIUS_API = `https://api.helius.xyz/v0`;
+
+const $ = id => document.getElementById(id);
+document.documentElement.style.setProperty('--h', CONFIG.HUE);
+$('proj').textContent   = CONFIG.PROJECT.toUpperCase();
+$('ticker').textContent = CONFIG.TICKER;
+document.title = CONFIG.PROJECT + " · Holder Passport";
+
+let pubkey = null;
+let walletSession = null;
+let handle = "";
+let data = null;
+let pfpImg = null;
+
+/* ============================================================
+   WALLET LAYER
+============================================================ */
+let wsModule;
+async function loadStandard() {
+  if (wsModule !== undefined) return wsModule;
+  try { wsModule = await import("https://esm.sh/@wallet-standard/app@1.0.1"); }
+  catch (e) { wsModule = false; }
+  return wsModule;
+}
+function standardAdapter(w){
+  return {
+    name: w.name, icon: w.icon || null,
+    async connect(){
+      const res = await w.features['standard:connect'].connect();
+      const account = (res && res.accounts && res.accounts[0]) || w.accounts[0];
+      if(!account) throw new Error("No account returned");
+      return {
+        address: account.address,
+        signMessage: async (bytes) => {
+          const out = await w.features['solana:signMessage'].signMessage({ account, message: bytes });
+          const first = Array.isArray(out) ? out[0] : out;
+          return first.signature;
+        }
+      };
+    }
+  };
+}
+const INJECTED = [
+  ["Phantom",   () => (window.phantom && window.phantom.solana) || (window.solana && window.solana.isPhantom ? window.solana : null)],
+  ["Solflare",  () => (window.solflare && window.solflare.isSolflare ? window.solflare : null)],
+  ["Backpack",  () => window.backpack || null],
+  ["Glow",      () => window.glow || null],
+  ["Magic Eden",() => (window.magicEden && window.magicEden.solana) || null],
+  ["OKX",       () => (window.okxwallet && window.okxwallet.solana) || null],
+  ["Coinbase",  () => window.coinbaseSolana || null],
+  ["Trust",     () => (window.trustwallet && window.trustwallet.solana) || null],
+  ["Exodus",    () => (window.exodus && window.exodus.solana) || null],
+  ["Nightly",   () => (window.nightly && window.nightly.solana) || null]
+];
+function injectedAdapter(name, p){
+  return {
+    name, icon: p.icon || null,
+    async connect(){
+      const res = await p.connect();
+      const address = ((res && res.publicKey) || p.publicKey).toString();
+      return {
+        address,
+        signMessage: async (bytes) => {
+          const r = await p.signMessage(bytes, "utf8");
+          return (r && r.signature) ? r.signature : r;
+        }
+      };
+    }
+  };
+}
+async function getAllWallets(){
+  const out = [], seen = new Set();
+  const mod = await loadStandard();
+  if(mod && mod.getWallets){
+    try {
+      for(const w of mod.getWallets().get()){
+        if(!w.features || !w.features['standard:connect'] || !w.features['solana:signMessage']) continue;
+        const key = String(w.name).toLowerCase();
+        if(seen.has(key)) continue;
+        seen.add(key); out.push(standardAdapter(w));
+      }
+    } catch(e){}
+  }
+  for(const [name, get] of INJECTED){
+    let p = null; try{ p = get(); }catch(e){}
+    if(!p || typeof p.connect !== "function") continue;
+    const key = name.toLowerCase(); if(seen.has(key)) continue;
+    seen.add(key); out.push(injectedAdapter(name, p));
+  }
+  return out;
+}
+
+/* ============================================================
+   PASSPORT CARD
+============================================================ */
+function hash(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed){let s=seed;return()=>{s^=s<<13;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296}}
+function build(addr){
+  const r = rng(hash(addr)), roll = r();
+  const tiers = [[.01,"MYTHIC"],[.06,"LEGENDARY"],[.20,"EPIC"],[.45,"RARE"],[1,"COMMON"]];
+  const tier = tiers.find(t => roll <= t[0])[1];
+  const boost = {MYTHIC:55,LEGENDARY:40,EPIC:25,RARE:12,COMMON:0}[tier];
+  const stats = CONFIG.STATS.map(n => [n, Math.min(99, Math.floor(25 + r()*(75 - boost*0.3) + boost*0.6))]);
+  const serial = String(1 + Math.floor(r()*9999)).padStart(4,"0");
+  return { tier, stats, serial, hue: (CONFIG.HUE + Math.floor(r()*120)) % 360 };
+}
+const short = a => a.slice(0,4) + "…" + a.slice(-4);
+
+function render(){
+  $('hd').textContent = handle ? "@" + handle : "@anon";
+  $('wl').textContent = pubkey ? short(pubkey) : "wallet not connected";
+  if(data){
+    document.documentElement.style.setProperty('--h', data.hue);
+    $('tier').textContent = data.tier;
+    $('ser').textContent  = "#" + data.serial;
+    $('stats').innerHTML = data.stats.map(([n,v]) =>
+      `<div class="st"><span>${n}</span><div class="bar"><i data-v="${v}"></i></div><b>${v}</b></div>`
+    ).join("");
+    requestAnimationFrame(() =>
+      document.querySelectorAll('.bar i').forEach(i => i.style.width = i.dataset.v + "%")
+    );
+  }
+}
+function setStep(n){
+  ["s1","s2","s3"].forEach((id,i) => {
+    const e = $(id);
+    e.classList.toggle('on',   i+1 <= n);
+    e.classList.toggle('done', i+1 <  n);
+  });
+}
+function say(m, err){
+  const n = $('note');
+  n.textContent = m;
+  n.className = "note" + (err ? " err" : "");
+}
+
+$('connect').onclick = async () => {
+  $('connect').disabled = true;
+  const orig = $('connect').textContent;
+  $('connect').textContent = "Looking for wallets…";
+  say("Scanning for installed wallets…");
+  let wallets = [];
+  try { wallets = await getAllWallets(); } catch(e){}
+  $('connect').disabled = false;
+  $('connect').textContent = orig;
+
+  if(!wallets.length){
+    say("No Solana wallet detected. Install one or open this page inside your wallet's in-app browser.", true);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if(isMobile && location.href.startsWith("http")){
+      const url = "https://phantom.app/ul/browse/" + encodeURIComponent(location.href)
+                + "?ref=" + encodeURIComponent(location.origin);
+      setTimeout(()=>location.href=url, 900);
+    } else window.open("https://phantom.app/download","_blank");
+    return;
+  }
+  if(wallets.length === 1) doConnect(wallets[0]);
+  else showModal(wallets);
+};
+function showModal(list){
+  const box = $('walletlist'); box.innerHTML = "";
+  list.forEach(w => {
+    const b = document.createElement('button');
+    b.className = 'wbtn';
+    const icon = w.icon ? `<img src="${w.icon}" alt="">`
+                       : `<span class="wic">${(w.name[0]||"?").toUpperCase()}</span>`;
+    b.innerHTML = `${icon}<span>${w.name}</span>`;
+    b.onclick = () => { hideModal(); doConnect(w); };
+    box.appendChild(b);
+  });
+  $('modal').classList.add('show');
+}
+function hideModal(){ $('modal').classList.remove('show'); }
+$('modalclose').onclick = hideModal;
+$('modal').addEventListener('click', e => { if(e.target === $('modal')) hideModal(); });
+
+async function doConnect(adapter){
+  say(`Connecting to ${adapter.name}…`);
+  try{
+    walletSession = await adapter.connect();
+    pubkey = walletSession.address;
+    data = build(pubkey);
+    $('connect').textContent = "Connected · " + short(pubkey);
+    $('connect').disabled = true;
+    $('handle').disabled = false;
+    $('handle').focus();
+    $('scan').disabled = false;
+    setStep(2); render();
+    say(`Wallet linked via ${adapter.name}. Your tier is locked in. Now add your X handle.`);
+  }catch(e){
+    say("Connection failed: " + (e && e.message ? e.message : "cancelled"), true);
+  }
+}
+
+let t;
+$('handle').addEventListener('input', e => {
+  handle = e.target.value.replace(/^@/,"").replace(/[^A-Za-z0-9_]/g,"").slice(0,15);
+  e.target.value = handle;
+  render();
+  $('forge').disabled = handle.length < 1 || !pubkey;
+  clearTimeout(t); t = setTimeout(loadPfp, 500);
+});
+function loadPfp(){
+  if(!handle) return;
+  const img = new Image(); img.crossOrigin = "anonymous";
+  img.onload  = () => { pfpImg = img; $('pfp').style.backgroundImage = `url(${img.src})`; $('pfp').textContent = ""; };
+  img.onerror = () => { pfpImg = null; $('pfp').style.backgroundImage = ""; $('pfp').textContent = handle[0].toUpperCase(); };
+  img.src = "https://unavatar.io/twitter/" + encodeURIComponent(handle) + "?fallback=false";
+}
+
+$('forge').onclick = async () => {
+  if(!walletSession || !pubkey) return;
+  const msg =
+`${CONFIG.PROJECT} Holder Passport
+Wallet: ${pubkey}
+X: @${handle}
+Nonce: ${Date.now()}
+(This signature costs nothing and moves no funds.)`;
+  try{
+    await walletSession.signMessage(new TextEncoder().encode(msg));
+    $('card').classList.add('signed'); setStep(4);
+    $('dl').disabled = false; $('share').disabled = false;
+    $('forge').textContent = "Forged ✓"; $('forge').disabled = true;
+    burst(); say("Passport forged. Download it or post it to X.");
+    try{ localStorage.setItem("passport", JSON.stringify({pubkey, handle})); }catch(e){}
+  }catch(e){ say("Signature rejected. It's free and moves no funds.", true); }
+};
+
+$('share').onclick = () => {
+  if(!data) return;
+  const text = CONFIG.SHARE_TEXT(data.tier, data.serial, CONFIG.TICKER) + `\n${CONFIG.TICKER}`;
+  window.open("https://x.com/intent/post?text=" + encodeURIComponent(text)
+            + "&url=" + encodeURIComponent(CONFIG.SHARE_URL), "_blank");
+};
+
+function rr(x, px, py, w, h, r){
+  r = Math.min(r, w/2, h/2);
+  x.beginPath();
+  x.moveTo(px+r, py);
+  x.arcTo(px+w, py,   px+w, py+h, r);
+  x.arcTo(px+w, py+h, px,   py+h, r);
+  x.arcTo(px,   py+h, px,   py,   r);
+  x.arcTo(px,   py,   px+w, py,   r);
+  x.closePath();
+}
+function money(n){
+  if(!isFinite(n)) return "$0";
+  const s = n < 0 ? "-" : "";
+  n = Math.abs(n);
+  if(n >= 1e9) return s + "$" + (n/1e9).toFixed(2) + "B";
+  if(n >= 1e6) return s + "$" + (n/1e6).toFixed(2) + "M";
+  if(n >= 1e3) return s + "$" + (n/1e3).toFixed(1) + "K";
+  return s + "$" + n.toFixed(n < 1 ? 4 : 2);
+}
+function sol(n){
+  if(!isFinite(n)) return "0";
+  const s = n < 0 ? "-" : ""; n = Math.abs(n);
+  return s + n.toFixed(n < 1 ? 3 : 2) + " SOL";
+}
+
+$('dl').onclick = () => {
+  if(!data) return;
+  const W = 1080, H = 1350, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d'); const h = data.hue;
+  const g = x.createLinearGradient(0,0,W,H);
+  g.addColorStop(0,`hsl(${h} 60% 18%)`); g.addColorStop(.6,"#0b0916"); g.addColorStop(1,`hsl(${(h+60)%360} 70% 14%)`);
+  x.fillStyle = g; x.fillRect(0,0,W,H);
+  x.strokeStyle = `hsl(${h} 90% 65%)`; x.lineWidth = 8; x.strokeRect(24,24,W-48,H-48);
+  x.fillStyle = `hsl(${h} 90% 80%)`; x.font = "700 34px system-ui"; x.textAlign = "left";
+  x.fillText(CONFIG.PROJECT.toUpperCase(), 70, 110);
+  x.textAlign = "right"; x.fillText("#" + data.serial, W-70, 110);
+  const cx = W/2, cy = 430, R = 190;
+  const rg = x.createLinearGradient(cx-R, cy-R, cx+R, cy+R);
+  rg.addColorStop(0,`hsl(${h} 100% 70%)`); rg.addColorStop(.5,"#7df9ff"); rg.addColorStop(1,"#ffe66d");
+  x.fillStyle = rg; x.beginPath(); x.arc(cx, cy, R+14, 0, Math.PI*2); x.fill();
+  x.save(); x.beginPath(); x.arc(cx, cy, R, 0, Math.PI*2); x.clip();
+  if(pfpImg){ try{ x.drawImage(pfpImg, cx-R, cy-R, R*2, R*2); }catch(e){ x.fillStyle="#14112a"; x.fillRect(cx-R,cy-R,R*2,R*2);} }
+  else { x.fillStyle = "#14112a"; x.fillRect(cx-R, cy-R, R*2, R*2);
+         x.fillStyle = "#fff"; x.font = "900 180px system-ui"; x.textAlign = "center";
+         x.fillText(((handle[0]||"?")).toUpperCase(), cx, cy + 62); }
+  x.restore();
+  x.textAlign = "center"; x.fillStyle = "#fff"; x.font = "900 72px system-ui"; x.fillText("@" + handle, cx, 740);
+  x.fillStyle = "#8b86a8"; x.font = "38px ui-monospace,monospace"; x.fillText(short(pubkey), cx, 795);
+  x.font = "900 40px system-ui"; const bw = x.measureText(data.tier).width + 120;
+  const bg = x.createLinearGradient(cx-bw/2, 0, cx+bw/2, 0);
+  bg.addColorStop(0,`hsl(${h} 95% 70%)`); bg.addColorStop(1,"#7df9ff");
+  x.fillStyle = bg; rr(x, cx-bw/2, 830, bw, 76, 38); x.fill();
+  x.fillStyle = "#0a0814"; x.fillText(data.tier, cx, 883);
+  if(window.FUMBLED > 0){
+    x.fillStyle = "#ff7a90"; x.font = "800 30px system-ui";
+    x.fillText("💀 FUMBLED ~" + money(window.FUMBLED), cx, 945);
+  }
+  data.stats.forEach(([n,v], i) => {
+    const y = 990 + i*70;
+    x.textAlign = "left"; x.fillStyle = "#cfc9ee"; x.font = "700 28px system-ui"; x.fillText(n, 90, y);
+    x.fillStyle = "#ffffff18"; rr(x, 380, y-24, 520, 22, 11); x.fill();
+    const sg = x.createLinearGradient(380, 0, 900, 0);
+    sg.addColorStop(0,`hsl(${h} 95% 65%)`); sg.addColorStop(1,"#7df9ff");
+    x.fillStyle = sg; rr(x, 380, y-24, Math.max(6, 520*v/100), 22, 11); x.fill();
+    x.textAlign = "right"; x.fillStyle = "#fff"; x.fillText(v, W-90, y);
+  });
+  x.textAlign = "left"; x.fillStyle = "#8b86a8"; x.font = "700 28px system-ui"; x.fillText(CONFIG.TICKER, 70, H-60);
+  x.textAlign = "right"; x.fillStyle = "#7dffb0"; x.fillText("✓ SIGNED", W-70, H-60);
+  const a = document.createElement('a');
+  a.download = `passport-${handle || "anon"}.png`;
+  try{ a.href = c.toDataURL("image/png"); a.click(); }
+  catch(e){ say("Browser blocked the avatar export (CORS). Try again without an avatar.", true); }
+};
+
+/* ============================================================
+   TOKEN GRAVEYARD v2 — FIFO cost basis, realized PnL, USD
+============================================================ */
+
+const QUOTE   = new Set([
+  "So11111111111111111111111111111111111111112",
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  // USDC
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  // USDT
+  "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"    // mSOL
+]);
+const STABLES = new Set([
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+]);
+
+const CACHE_TTL = {
+  dex:   6 * 60 * 60 * 1000,   // 6h
+  gecko: 12 * 60 * 60 * 1000,  // 12h
+  sol:   30 * 60 * 1000        // 30min for latest price
+};
+const CACHE_KEY = { dex:"gy_dex_v2", gecko:"gy_gecko_v2", sol:"gy_solhist_v2", solspot:"gy_solspot_v2" };
+
+const DEPTH_LEVELS = [
+  {pages: 5,  maxAth: 10, label: "Light"   },
+  {pages: 15, maxAth: 25, label: "Normal"  },
+  {pages: 40, maxAth: 50, label: "Deep"    },
+  {pages: 80, maxAth: 80, label: "Whale"   },
+  {pages:200, maxAth:120, label: "Insane"  }
+];
+
+function cacheGet(key, ttl){
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return null;
+    const {data, ts} = JSON.parse(raw);
+    if(Date.now() - ts > ttl) return null;
+    return data;
+  }catch(e){ return null; }
+}
+function cacheSet(key, data){
+  try{ localStorage.setItem(key, JSON.stringify({data, ts: Date.now()})); }catch(e){}
+}
+function mergeCache(key, patch){
+  try{
+    const cur = JSON.parse(localStorage.getItem(key) || "{}");
+    cur.data = Object.assign(cur.data || {}, patch);
+    cur.ts = Date.now();
+    localStorage.setItem(key, JSON.stringify(cur));
+  }catch(e){}
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function fj(url){
+  for(let i=0;i<4;i++){
+    let r;
+    try{ r = await fetch(url); }
+    catch(e){ await sleep(1200); continue; }
+    if(r.status === 429){ await sleep(4000 + i*2000); continue; }
+    if(r.status === 404) return null;
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
+  throw new Error("Rate limited");
+}
+
+function hs(m, err){
+  const n = $('hnote');
+  n.textContent = m;
+  n.className = "note" + (err ? " err" : "");
+}
+function setProgress(pct, msg){
+  const p = $('prog'), bar = p.querySelector('i');
+  if(pct == null){ p.classList.remove('show'); $('progtxt').textContent = ""; return; }
+  p.classList.add('show');
+  bar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  $('progtxt').textContent = msg || "";
+}
+
+/* -- SOL price history (CoinGecko public) -- */
+async function fetchSolHistory(fromMs, toMs){
+  const cached = cacheGet(CACHE_KEY.sol, 6*60*60*1000);
+  if(cached && cached.from <= fromMs && cached.to >= toMs) return cached.prices;
+
+  const from = Math.floor(fromMs/1000);
+  const to   = Math.floor(Math.min(toMs, Date.now())/1000);
+  // CoinGecko free: max 365 days per request; chunk if needed
+  const chunk = 350 * 24 * 60 * 60 * 1000; // 350 days in ms
+  const prices = [];
+  let cur = fromMs;
+  while(cur < toMs){
+    const end = Math.min(cur + chunk, toMs);
+    const url = `https://api.coingecko.com/api/v3/coins/solana/market_chart/range?vs_currency=usd&from=${Math.floor(cur/1000)}&to=${Math.floor(end/1000)}`;
+    try{
+      const j = await fj(url);
+      if(j && j.prices) for(const p of j.prices) prices.push(p);
+    }catch(e){}
+    cur = end + 1;
+    await sleep(2200);
+  }
+  prices.sort((a,b)=>a[0]-b[0]);
+  const payload = {from: fromMs, to: toMs, prices};
+  cacheSet(CACHE_KEY.sol, payload);
+  return prices;
+}
+function priceSolAt(prices, ts){
+  if(!prices || !prices.length) return 150;
+  let lo = 0, hi = prices.length - 1;
+  if(ts <= prices[0][0]) return prices[0][1];
+  if(ts >= prices[hi][0]) return prices[hi][1];
+  while(lo < hi){
+    const mid = (lo + hi) >> 1;
+    if(prices[mid][0] < ts) lo = mid + 1;
+    else hi = mid;
+  }
+  const a = prices[Math.max(0, lo-1)], b = prices[lo];
+  if(!a) return b[1];
+  const t = (ts - a[0]) / (b[0] - a[0] || 1);
+  return a[1] + (b[1] - a[1]) * t;
+}
+async function fetchSolSpot(){
+  const cached = cacheGet(CACHE_KEY.solspot, CACHE_TTL.sol);
+  if(cached) return cached;
+  try{
+    const sr = await fj("https://api.dexscreener.com/tokens/v1/solana/So11111111111111111111111111111111111111112");
+    const best = (sr||[]).sort((a,b)=>((b.liquidity&&b.liquidity.usd)||0)-((a.liquidity&&a.liquidity.usd)||0))[0];
+    const p = best ? +best.priceUsd : 150;
+    cacheSet(CACHE_KEY.solspot, p);
+    return p;
+  }catch(e){ return 150; }
+}
+
+/* -- Core: fetch all txs -- */
+async function fetchAllTxs(wallet, maxPages, onProgress){
+  const all = [];
+  let before = "";
+  for(let p = 0; p < maxPages; p++){
+    onProgress && onProgress(p, maxPages, all.length);
+    const url = `${HELIUS_API}/addresses/${wallet}/transactions`
+              + `?api-key=${encodeURIComponent(CONFIG.HELIUS_KEY)}`
+              + `&limit=100` + (before ? `&before=${before}` : "");
+    const txs = await fj(url);
+    if(!Array.isArray(txs) || !txs.length) break;
+    for(const tx of txs) all.push(tx);
+    before = txs[txs.length-1].signature;
+    if(txs.length < 100) break;
+    await sleep(150);
+  }
+  // Helius returns newest-first. Sort ascending by timestamp for FIFO.
+  all.sort((a,b)=>a.timestamp - b.timestamp);
+  return all;
+}
+
+/* -- Build FIFO ledger from txs -- */
+function buildLedger(txs, wallet, solHist){
+  const mints = {}; // mint -> {lots:[], bought, sold, solSpent, solReceived, usdSpent, usdReceived,
+                    //         realizedSol, realizedUsd, buys, sells, first, last, unknownTxs}
+  const quoteStables = new Set(STABLES);
+
+  for(const tx of txs){
+    const deltas = {};       // mint -> net token amount
+    let stableUsdDelta = 0;  // net USD from stablecoin transfers
+    let hasStable = false;
+
+    for(const t of tx.tokenTransfers || []){
+      const amt = +t.tokenAmount || 0;
+      if(quoteStables.has(t.mint)){
+        if(t.toUserAccount === wallet){ stableUsdDelta += amt; hasStable = true; }
+        if(t.fromUserAccount === wallet){ stableUsdDelta -= amt; hasStable = true; }
+        continue;
+      }
+      if(QUOTE.has(t.mint)) continue; // skip SOL/mSOL — tracked via nativeBalanceChange
+      if(t.toUserAccount === wallet)   deltas[t.mint] = (deltas[t.mint]||0) + amt;
+      if(t.fromUserAccount === wallet) deltas[t.mint] = (deltas[t.mint]||0) - amt;
+    }
+
+    const active = Object.keys(deltas).filter(m => Math.abs(deltas[m]) > 0);
+    if(!active.length) continue;
+
+    // SOL delta on this wallet
+    const nb = (tx.accountData || []).find(a => a.account === wallet);
+    const solDelta = nb ? nb.nativeBalanceChange / 1e9 : 0;
+
+    const solUsdTx = priceSolAt(solHist, tx.timestamp * 1000);
+    const share = solDelta / active.length;
+    const stableShare = hasStable ? stableUsdDelta / active.length : null;
+
+    for(const m of active){
+      const o = mints[m] || (mints[m] = {
+        lots: [], bought: 0, sold: 0,
+        solSpent: 0, solReceived: 0, usdSpent: 0, usdReceived: 0,
+        realizedSol: 0, realizedUsd: 0,
+        buys: 0, sells: 0, first: tx.timestamp, last: tx.timestamp,
+        unknownTxs: 0
+      });
+      o.first = Math.min(o.first, tx.timestamp);
+      o.last  = Math.max(o.last,  tx.timestamp);
+
+      const d = deltas[m];
+      // USD value attributed to this mint for this tx:
+      //   prefer stablecoin amount, else SOL delta * solUsd
+      let usdValue = null;
+      if(stableShare != null && Math.abs(stableShare) > 0.0001) usdValue = Math.abs(stableShare);
+      else if(Math.abs(share) > 0.000001) usdValue = Math.abs(share) * solUsdTx;
+      else o.unknownTxs++;
+
+      if(d > 0){
+        // BUY
+        o.buys++;
+        o.bought += d;
+        const costSol = Math.abs(share) > 0.000001 ? Math.abs(share) : 0;
+        const costUsd = usdValue != null ? usdValue : 0;
+        o.solSpent += costSol;
+        o.usdSpent += costUsd;
+        o.lots.push({ amount: d, costSol, costUsd, ts: tx.timestamp });
+      } else {
+        // SELL
+        o.sells++;
+        const soldAmt = -d;
+        o.sold += soldAmt;
+        const recSol = Math.abs(share) > 0.000001 ? Math.abs(share) : 0;
+        const recUsd = usdValue != null ? usdValue : 0;
+        o.solReceived += recSol;
+        o.usdReceived += recUsd;
+
+        // FIFO: consume lots
+        let remaining = soldAmt;
+        let costSolConsumed = 0, costUsdConsumed = 0;
+        while(remaining > 1e-12 && o.lots.length){
+          const lot = o.lots[0];
+          const take = Math.min(lot.amount, remaining);
+          const frac = take / lot.amount;
+          costSolConsumed += lot.costSol * frac;
+          costUsdConsumed += lot.costUsd * frac;
+          lot.amount -= take;
+          lot.costSol -= lot.costSol * frac;
+          lot.costUsd -= lot.costUsd * frac;
+          remaining -= take;
+          if(lot.amount <= 1e-12) o.lots.shift();
+        }
+        o.realizedSol += recSol - costSolConsumed;
+        o.realizedUsd += recUsd - costUsdConsumed;
+      }
+    }
+  }
+  return mints;
+}
+
+/* -- Fetch market data (DexScreener + GeckoTerminal ATH) -- */
+async function fetchMarketData(mintsArr, maxAth, onProgress){
+  const dexCache = cacheGet(CACHE_KEY.dex, CACHE_TTL.dex) || {};
+  const geckoCache = cacheGet(CACHE_KEY.gecko, CACHE_TTL.gecko) || {};
+  const info = {};
+  const toFetch = mintsArr.filter(m => !dexCache[m]);
+  const hits = mintsArr.filter(m => dexCache[m]);
+
+  for(const m of hits) info[m] = dexCache[m];
+
+  for(let i = 0; i < toFetch.length; i += 30){
+    const slice = toFetch.slice(i, i+30);
+    try{
+      const arr = await fj("https://api.dexscreener.com/tokens/v1/solana/" + slice.join(","));
+      for(const pr of arr || []){
+        const m = pr.baseToken.address, l = (pr.liquidity && pr.liquidity.usd) || 0;
+        if(!info[m] || l > info[m].liq){
+          info[m] = {
+            sym: pr.baseToken.symbol, name: pr.baseToken.name,
+            price: +pr.priceUsd || 0,
+            mc: pr.marketCap || pr.fdv || 0,
+            pair: pr.pairAddress,
+            img: pr.info && pr.info.imageUrl,
+            liq: l
+          };
+        }
+      }
+    }catch(e){}
+    await sleep(320);
+  }
+  // merge cache
+  mergeCache(CACHE_KEY.dex, info);
+
+  // Now GeckoTerminal ATH for top-N (by activity)
+  const ranked = mintsArr
+    .filter(m => info[m] && info[m].pair)
+    .slice(0, maxAth);
+  let done = 0;
+  for(const m of ranked){
+    const inf = info[m];
+    if(geckoCache[inf.pair]){ inf.ath = geckoCache[inf.pair].ath; done++; continue; }
+    onProgress && onProgress(done, ranked.length, m);
+    try{
+      const j = await fj(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${inf.pair}/ohlcv/day?aggregate=1&limit=1000&currency=usd`);
+      const list = (j && j.data && j.data.attributes && j.data.attributes.ohlcv_list) || [];
+      if(list.length) inf.ath = Math.max(inf.price, ...list.map(c => c[2]));
+      else inf.ath = inf.price;
+      geckoCache[inf.pair] = { ath: inf.ath };
+    }catch(e){ inf.ath = inf.price; }
+    done++;
+    await sleep(2200);
+  }
+  try{ localStorage.setItem(CACHE_KEY.gecko, JSON.stringify({data: geckoCache, ts: Date.now()})); }catch(e){}
+  return info;
+}
+
+/* -- Depth slider -- */
+const depthEl = $('depth');
+function updateDepthLabel(){
+  const d = DEPTH_LEVELS[+depthEl.value - 1];
+  $('depthlabel').textContent = `Depth: ${d.label} · ${d.pages * 100} txs · top ${d.maxAth} ATH`;
+}
+depthEl.addEventListener('input', updateDepthLabel);
+updateDepthLabel();
+
+/* -- MAIN SCAN -- */
+let currentRows = [], currentSort = "pnl", currentFilter = "all";
+
+$('scan').onclick = async () => {
+  if(!pubkey){ hs("Connect a wallet first.", true); return; }
+  if(!CONFIG.HELIUS_KEY){ hs("No Helius API key configured.", true); return; }
+
+  const depth = DEPTH_LEVELS[+depthEl.value - 1];
+  $('scan').disabled = true;
+  $('hres').innerHTML = "";
+
+  try{
+    setProgress(2, "Fetching transaction history from Helius…");
+    const txs = await fetchAllTxs(pubkey, depth.pages, (p, max, n) => {
+      setProgress(2 + (p/max) * 28, `Reading txs… page ${p+1}/${max} (${n} loaded)`);
+    });
+    if(!txs.length){
+      hs("No transactions found for this wallet.", true);
+      setProgress(null); $('scan').disabled = false; return;
+    }
+
+    setProgress(32, "Fetching historical SOL price…");
+    const solHist = await fetchSolHistory(txs[0].timestamp * 1000, Date.now());
+    const solSpot = await fetchSolSpot();
+
+    setProgress(38, "Building FIFO ledger…");
+    const mints = buildLedger(txs, pubkey, solHist);
+    const mintsArr = Object.keys(mints);
+    if(!mintsArr.length){
+      hs("No token trades found in scanned range.", true);
+      setProgress(null); $('scan').disabled = false; return;
+    }
+
+    setProgress(42, `Found ${mintsArr.length} tokens. Fetching prices…`);
+    const info = await fetchMarketData(mintsArr, depth.maxAth, (d, total, m) => {
+      setProgress(50 + (d/total) * 45, `Peak lookups… ${d+1}/${total} (${m.slice(0,4)}…)`);
+    });
+
+    setProgress(96, "Crunching numbers…");
+
+    // Aggregate rows
+    let totalRealizedUsd = 0, totalUnrealizedUsd = 0, totalFumbled = 0;
+    let totalCostUsd = 0, totalRealizedSol = 0;
+
+    const rows = mintsArr.map(m => {
+      const o = mints[m];
+      const inf = info[m] || null;
+      const currentPrice = inf ? inf.price : 0;
+      const supply = (inf && inf.price > 0 && inf.mc > 0) ? inf.mc / inf.price : 0;
+      const athMc  = (inf && inf.ath && supply) ? inf.ath * supply : 0;
+
+      // Held tokens = sum of remaining lots
+      let heldAmount = 0, heldCostSol = 0, heldCostUsd = 0;
+      for(const lot of o.lots){ heldAmount += lot.amount; heldCostSol += lot.costSol; heldCostUsd += lot.costUsd; }
+
+      // Fumble = what sold tokens would be worth at ATH, minus what you got
+      const sold = o.sold;
+      const gotUsd = o.usdReceived;
+      const fumble = (inf && inf.ath && sold > 0)
+        ? Math.max(0, sold * inf.ath - gotUsd)
+        : 0;
+
+      // Unrealized PnL (only if we can value held tokens)
+      const heldValueUsd = heldAmount * currentPrice;
+      const unrealizedUsd = heldValueUsd - heldCostUsd;
+
+      // Status
+      let st = "SOLD", cls = "c-sold";
+      if(!inf || inf.price === 0){ st = "DEAD"; cls = "c-dead"; }
+      else if(heldAmount > 0){
+        if(athMc && inf.mc < athMc * 0.1){ st = "BAGGED"; cls = "c-bag"; }
+        else { st = "HELD"; cls = "c-held"; }
+      }
+
+      totalRealizedUsd += o.realizedUsd;
+      totalUnrealizedUsd += unrealizedUsd;
+      totalFumbled += fumble;
+      totalCostUsd += o.usdSpent;
+      totalRealizedSol += o.realizedSol;
+
+      return {
+        mint: m, o, inf, heldAmount, heldCostUsd, heldValueUsd,
+        unrealizedUsd, fumble, athMc, st, cls,
+        realizedUsd: o.realizedUsd, realizedSol: o.realizedSol
+      };
+    });
+
+    window.FUMBLED = totalFumbled;
+    if(totalFumbled > 0) $('fum').textContent = "💀 FUMBLED ~" + money(totalFumbled);
+
+    // Portfolio grade
+    const totalPnlUsd = totalRealizedUsd + totalUnrealizedUsd;
+    const roi = totalCostUsd > 0 ? totalPnlUsd / totalCostUsd : 0;
+    let grade = "F";
+    if(roi > 3) grade = "S"; else if(roi > 1.5) grade = "A";
+    else if(roi > 0.7) grade = "B"; else if(roi > 0.2) grade = "C";
+    else if(roi > -0.2) grade = "D";
+
+    currentRows = rows;
+    renderResults(rows, {
+      totalRealizedUsd, totalUnrealizedUsd, totalFumbled,
+      totalCostUsd, totalRealizedSol, grade, roi, solSpot, txCount: txs.length
+    });
+
+    setProgress(100, `Done. ${txs.length} txs · ${rows.length} tokens.`);
+    setTimeout(()=>setProgress(null), 1500);
+
+    hs(`Scanned ${txs.length} txs (${depth.label} depth). Cost basis via FIFO, USD converted using historical SOL price at each trade timestamp.`);
+  }catch(e){
+    console.error(e);
+    hs("Scan failed: " + e.message, true);
+    setProgress(null);
+  }
+  $('scan').disabled = false;
+};
+
+/* -- Render results with filters + sort -- */
+function renderResults(rows, totals){
+  const held = rows.filter(r => r.st === "HELD" || r.st === "BAGGED").length;
+  const wins = rows.filter(r => r.realizedUsd > 0).length;
+  const losses = rows.filter(r => r.realizedUsd < 0).length;
+  const winRate = (wins + losses) > 0 ? wins / (wins + losses) : 0;
+
+  const hero =
+    `<div class="hero">
+      <div class="grade">${totals.grade}</div>
+      <div>
+        <div class="hmeta">Portfolio Grade · ROI ${(totals.roi*100).toFixed(0)}%</div>
+        <div class="hval ${totals.totalRealizedUsd+totals.totalUnrealizedUsd>=0?'pos':'neg'}">
+          ${money(totals.totalRealizedUsd + totals.totalUnrealizedUsd)}
+        </div>
+        <div class="hsub">Realized ${money(totals.totalRealizedUsd)} · Unrealized ${money(totals.totalUnrealizedUsd)}</div>
+      </div>
+    </div>`;
+
+  const stats =
+    `<div class="hero-stats">
+      <div class="hstat"><b>${rows.length}</b><span>Tokens traded</span></div>
+      <div class="hstat"><b>${held}</b><span>Still held</span></div>
+      <div class="hstat"><b>${(winRate*100).toFixed(0)}%</b><span>Win rate</span></div>
+      <div class="hstat neg"><b>${money(totals.totalFumbled)}</b><span>Fumbled</span></div>
+    </div>`;
+
+  const filters =
+    `<div class="filters">
+      <button class="filter ${currentFilter==='all'?'on':''}" data-f="all">All</button>
+      <button class="filter ${currentFilter==='held'?'on':''}" data-f="held">Held</button>
+      <button class="filter ${currentFilter==='sold'?'on':''}" data-f="sold">Sold</button>
+      <button class="filter ${currentFilter==='win'?'on':''}" data-f="win">Winners</button>
+      <button class="filter ${currentFilter==='loss'?'on':''}" data-f="loss">Losers</button>
+      <button class="filter ${currentFilter==='fumble'?'on':''}" data-f="fumble">Fumbles</button>
+      <select id="sortsel" style="background:#ffffff0a;color:var(--fg);border:1px solid #ffffff22;border-radius:99px;padding:6px 12px;font-size:11px;font-weight:700">
+        <option value="pnl">Sort: PnL</option>
+        <option value="fumble">Sort: Fumbled</option>
+        <option value="ath">Sort: Peak mcap</option>
+        <option value="recent">Sort: Recent</option>
+        <option value="size">Sort: Position size</option>
+      </select>
+    </div>`;
+
+  $('hres').innerHTML = hero + stats + filters + `<div id="list"></div>`;
+  attachFilterHandlers();
+  renderList();
+}
+
+function attachFilterHandlers(){
+  document.querySelectorAll('.filter').forEach(b => {
+    b.onclick = () => {
+      currentFilter = b.dataset.f;
+      document.querySelectorAll('.filter').forEach(x => x.classList.toggle('on', x === b));
+      renderList();
+    };
+  });
+  const sel = $('sortsel');
+  if(sel){ sel.value = currentSort; sel.onchange = () => { currentSort = sel.value; renderList(); }; }
+}
+
+function renderList(){
+  const list = $('list'); if(!list) return;
+  let rows = currentRows.slice();
+
+  // Filter
+  if(currentFilter === 'held')    rows = rows.filter(r => r.st === "HELD" || r.st === "BAGGED");
+  if(currentFilter === 'sold')    rows = rows.filter(r => r.st === "SOLD" || r.st === "DEAD");
+  if(currentFilter === 'win')     rows = rows.filter(r => r.realizedUsd > 0);
+  if(currentFilter === 'loss')    rows = rows.filter(r => r.realizedUsd < 0);
+  if(currentFilter === 'fumble')  rows = rows.filter(r => r.fumble > 100);
+
+  // Sort
+  if(currentSort === 'pnl')     rows.sort((a,b) => (b.realizedUsd + b.unrealizedUsd) - (a.realizedUsd + a.unrealizedUsd));
+  if(currentSort === 'fumble')  rows.sort((a,b) => b.fumble - a.fumble);
+  if(currentSort === 'ath')     rows.sort((a,b) => b.athMc - a.athMc);
+  if(currentSort === 'recent')  rows.sort((a,b) => b.o.last - a.o.last);
+  if(currentSort === 'size')    rows.sort((a,b) => b.o.usdSpent - a.o.usdSpent);
+
+  if(!rows.length){
+    list.innerHTML = `<div class="note">No tokens match this filter.</div>`;
+    return;
+  }
+
+  list.innerHTML = rows.map((r, i) => {
+    const sym = r.inf ? esc(r.inf.sym) : esc(r.mint.slice(0,4) + "…" + r.mint.slice(-4));
+    const icon = (r.inf && r.inf.img)
+      ? `<img src="${esc(r.inf.img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`
+      : `<div class="ic">${(sym[0]||"?").toUpperCase()}</div>`;
+
+    const pnlUsd = r.realizedUsd + r.unrealizedUsd;
+    const pnlCls = pnlUsd >= 0 ? "pos" : "neg";
+    const pnlLabel = pnlUsd >= 0 ? "PnL" : "PnL";
+    const fumbleLabel = r.fumble > 100 ? `−${money(r.fumble)}` : (pnlUsd < 0 ? "loss" : "—");
+    const fumbleCls = r.fumble > 100 ? "neg" : (pnlUsd < 0 ? "neg" : "");
+
+    const firstDate = new Date(r.o.first * 1000).toLocaleDateString();
+    const lastDate  = new Date(r.o.last  * 1000).toLocaleDateString();
+
+    return `<div class="hwrap">
+      <div class="hrow" onclick="this.parentElement.classList.toggle('open')">
+        ${icon}
+        <div>
+          <div class="hs">$${sym}<span class="chip ${r.cls}">${r.st}</span></div>
+          <div class="hm">${r.o.buys}b · ${r.o.sells}s · first ${firstDate} · peak ${r.athMc?money(r.athMc):"n/a"} · now ${r.inf?money(r.inf.mc):"dead"}</div>
+        </div>
+        <div class="hf ${pnlCls}">
+          <b>${pnlUsd>=0?'+':''}${money(pnlUsd)}</b>
+          <span>${fumbleLabel !== "—" && fumbleLabel !== "loss" ? "FUMBLED "+fumbleLabel : pnlLabel}</span>
+        </div>
+      </div>
+      <div class="hdetail">
+        <div class="dgrid">
+          <div>Bought: <b>${r.o.bought.toLocaleString(undefined,{maximumFractionDigits:2})}</b> tokens</div>
+          <div>Sold: <b>${r.o.sold.toLocaleString(undefined,{maximumFractionDigits:2})}</b> tokens</div>
+          <div>Held: <b>${r.heldAmount.toLocaleString(undefined,{maximumFractionDigits:2})}</b> tokens</div>
+          <div>Cost basis: <b>${money(r.o.usdSpent)}</b></div>
+          <div>Proceeds: <b>${money(r.o.usdReceived)}</b></div>
+          <div>Realized PnL: <b style="color:${r.realizedUsd>=0?'#7dffb0':'#ff7a90'}">${r.realizedUsd>=0?'+':''}${money(r.realizedUsd)}</b></div>
+          <div>Unrealized PnL: <b style="color:${r.unrealizedUsd>=0?'#7dffb0':'#ff7a90'}">${r.unrealizedUsd>=0?'+':''}${money(r.unrealizedUsd)}</b></div>
+          <div>Fumbled: <b style="color:#ff7a90">${r.fumble>0?money(r.fumble):"—"}</b></div>
+          <div>Peak mcap: <b>${r.athMc?money(r.athMc):"—"}</b></div>
+          <div>Current mcap: <b>${r.inf?money(r.inf.mc):"dead"}</b></div>
+          <div>First trade: <b>${firstDate}</b></div>
+          <div>Last trade: <b>${lastDate}</b></div>
+        </div>
+        <div style="margin-top:8px">
+          <a href="https://solscan.io/token/${r.mint}" target="_blank" style="color:hsl(var(--h) 90% 70%)">View on Solscan ↗</a>
+          ${r.inf && r.inf.pair ? ` · <a href="https://dexscreener.com/solana/${r.inf.pair}" target="_blank" style="color:hsl(var(--h) 90% 70%)">DexScreener ↗</a>` : ""}
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+/* ============================================================
+   CARD TILT
+============================================================ */
+const card = $('card');
+function tilt(e){
+  const r = card.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  const px = (p.clientX - r.left) / r.width;
+  const py = (p.clientY - r.top)  / r.height;
+  card.classList.remove('idle');
+  card.style.setProperty('--ry', ((px - .5) * 24) + 'deg');
+  card.style.setProperty('--rx', ((.5 - py) * 24) + 'deg');
+  card.style.setProperty('--mx', px * 100 + '%');
+  card.style.setProperty('--my', py * 100 + '%');
+}
+card.addEventListener('pointermove', tilt);
+card.addEventListener('touchmove', tilt, {passive:true});
+card.addEventListener('pointerleave', () => {
+  card.style.setProperty('--ry','0deg');
+  card.style.setProperty('--rx','0deg');
+  card.classList.add('idle');
+});
+
+/* ============================================================
+   STARFIELD + BURST
+============================================================ */
+const cv = $('stars'), cx2 = cv.getContext('2d');
+let S = [], B = [];
+function size(){
+  cv.width = innerWidth; cv.height = innerHeight;
+  S = Array.from({length:110}, () => ({
+    x: Math.random()*cv.width, y: Math.random()*cv.height, z: Math.random()*1.5+.3
+  }));
+}
+size();
+addEventListener('resize', size);
+function burst(){
+  for(let i=0;i<120;i++){
+    const a = Math.random()*6.28, s = Math.random()*9+2;
+    B.push({ x: cv.width/2, y: cv.height/2, vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+             l: 60+Math.random()*40, c: Math.random()*360 });
+  }
+}
+(function loop(){
+  cx2.clearRect(0,0,cv.width,cv.height);
+  S.forEach(s => {
+    s.y += s.z*.25; if(s.y > cv.height) s.y = 0;
+    cx2.fillStyle = `rgba(255,255,255,${.25 + s.z*.3})`;
+    cx2.fillRect(s.x, s.y, s.z, s.z);
+  });
+  B = B.filter(b => b.l-- > 0);
+  B.forEach(b => {
+    b.x += b.vx; b.y += b.vy; b.vy += .12;
+    cx2.fillStyle = `hsla(${b.c},100%,65%,${b.l/100})`;
+    cx2.fillRect(b.x, b.y, 4, 4);
+  });
+  requestAnimationFrame(loop);
+})();
+
+/* ============================================================
+   PREVIEW CARD
+============================================================ */
+data = build("preview-" + CONFIG.PROJECT);
+render();
+data = null;
+$('tier').textContent = "UNREVEALED";
+$('ser').textContent  = "#0000";
+$('stats').innerHTML  = "";
+</script>
+</body>
+</html>
