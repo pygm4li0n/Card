@@ -188,8 +188,8 @@ const CONFIG = {
   TICKER: "$TICKER",
   HUE: 275,
   HELIUS_KEY: "fa7e6515-19de-45de-a7d1-35a64a0d9a1a",
-  /* Optional: paste a free DexPaprika key from console.dexpaprika.com
-     to double the rate limit from 15 req/min → 30 req/min. Leave "" for keyless. */
+  /* Optional: free DexPaprika key from console.dexpaprika.com.
+     Doubles rate limit (15→30 req/min) and halves ATH lookup time. */
   DEXPAPRIKA_KEY: "",
   SHARE_URL: location.href.startsWith("http") ? location.href : "https://yourproject.xyz",
   SHARE_TEXT: (tier, serial, ticker) =>
@@ -506,7 +506,7 @@ $('dl').onclick = () => {
 };
 
 /* ============================================================
-   TOKEN GRAVEYARD v4 — rate-limit safe, global host queue
+   TOKEN GRAVEYARD v5 — proper async serial queue per host
 ============================================================ */
 
 const QUOTE = new Set([
@@ -525,20 +525,20 @@ const CACHE_TTL = {
   ath:  12 * 60 * 60 * 1000,
   sol:  30 * 60 * 1000
 };
-const CACHE_KEY = { dex:"gy_dex_v4", ath:"gy_ath_v4", sol:"gy_sol_v4" };
+const CACHE_KEY = { dex:"gy_dex_v5", ath:"gy_ath_v5", sol:"gy_sol_v5" };
 
 /*
   DEPTH_LEVELS: pages of Helius txs + max ATH lookups.
-  DexPaprika keyless = 15 req/min → 1 ATH lookup every ~4.2s.
-  With DEXPAPRIKA_KEY set = 30 req/min → ~2.2s per lookup.
-  So a Normal run with 10 ATH lookups ≈ 42s (keyless) / 22s (keyed).
+  Helius free tier: 2 req/s on Enhanced APIs → 700ms spacing.
+  DexPaprika keyless: 15 req/min → 4200ms spacing.
+  With DEXPAPRIKA_KEY: 30 req/min → 2100ms spacing.
 */
 const DEPTH_LEVELS = [
-  { pages: 5,   maxAth: 5,  label: "Light"   },
-  { pages: 15,  maxAth: 10, label: "Normal"  },
-  { pages: 40,  maxAth: 20, label: "Deep"    },
-  { pages: 80,  maxAth: 35, label: "Whale"   },
-  { pages: 200, maxAth: 60, label: "Insane"  }
+  { pages: 5,   maxAth: 3,  label: "Light"   },
+  { pages: 10,  maxAth: 5,  label: "Normal"  },
+  { pages: 25,  maxAth: 10, label: "Deep"    },
+  { pages: 50,  maxAth: 20, label: "Whale"   },
+  { pages: 100, maxAth: 40, label: "Insane"  }
 ];
 
 function cacheGet(key, ttl){
@@ -566,44 +566,62 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-/* ---- Global per-host rate limiter + retry w/ exponential backoff ---- */
-const HOST_LIMITS = {
-  "api.helius.xyz":     { minInterval: 600,  lastCall: 0 },   // 2 req/s free tier enhanced APIs
-  "api.dexpaprika.com": { minInterval: 4200, lastCall: 0 },   // 15 req/min keyless (2000ms with key)
-  "api.dexscreener.com":{ minInterval: 260,  lastCall: 0 }    // 300 req/min free
+/* ------------------------------------------------------------
+   PER-HOST SERIAL QUEUE
+   Guarantees at least minInterval between response-end of one
+   request and start of the next. Retries go through the same
+   chain — no bypass. minInterval grows adaptively on 429.
+------------------------------------------------------------ */
+const HOST_QUEUES = {};
+const HOST_CONFIG = {
+  "api.helius.xyz":      { minInterval: 750,  name: "Helius"      },
+  "api.dexpaprika.com":  { minInterval: 4200, name: "DexPaprika"  },
+  "api.dexscreener.com": { minInterval: 300,  name: "DexScreener" }
 };
-// If a DexPaprika key is provided, we can go faster
 if(CONFIG.DEXPAPRIKA_KEY){
-  HOST_LIMITS["api.dexpaprika.com"].minInterval = 2100;
+  HOST_CONFIG["api.dexpaprika.com"].minInterval = 2100;
 }
 
-async function fj(url, headers){
+function queueFetch(url, headers){
   const host = new URL(url).host;
-  const lim = HOST_LIMITS[host];
-  if(lim){
-    const wait = lim.minInterval - (Date.now() - lim.lastCall);
+  const cfg = HOST_CONFIG[host] || { minInterval: 500, name: host };
+
+  if(!HOST_QUEUES[host]){
+    HOST_QUEUES[host] = { chain: Promise.resolve(), lastEnd: 0 };
+  }
+  const q = HOST_QUEUES[host];
+
+  q.chain = q.chain.then(async () => {
+    // Space from the *response end* of the previous request on this host
+    const wait = cfg.minInterval - (Date.now() - q.lastEnd);
     if(wait > 0) await sleep(wait);
-    lim.lastCall = Date.now();
-  }
-  for(let i = 0; i < 5; i++){
-    let r;
-    try{ r = await fetch(url, {headers}); }
-    catch(e){
-      await sleep(Math.min(15000, 1000 * Math.pow(2, i)) + Math.random()*400);
-      continue;
+
+    for(let i = 0; i < 6; i++){
+      let r;
+      try{
+        r = await fetch(url, { headers });
+      }catch(e){
+        await sleep(Math.min(20000, 1500 * Math.pow(2, i)));
+        continue;
+      }
+      q.lastEnd = Date.now();
+
+      if(r.status === 429){
+        // Adaptive cooldown: grow interval for the rest of the session
+        const old = cfg.minInterval;
+        cfg.minInterval = Math.min(cfg.minInterval * 1.4, 15000);
+        console.warn(`[429] ${cfg.name} retry ${i+1}/6 — interval ${old}ms → ${cfg.minInterval}ms`);
+        await sleep(Math.min(40000, 3000 * Math.pow(2, i)) + Math.random() * 1500);
+        continue;
+      }
+      if(r.status === 404) return null;
+      if(!r.ok) throw new Error("HTTP " + r.status + " from " + cfg.name);
+      return r.json();
     }
-    if(r.status === 429){
-      // bump the host interval for the rest of the session
-      if(lim) lim.minInterval = Math.min(lim.minInterval * 1.5, 12000);
-      const backoff = Math.min(30000, 2500 * Math.pow(2, i)) + Math.random() * 1000;
-      await sleep(backoff);
-      continue;
-    }
-    if(r.status === 404) return null;
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    return r.json();
-  }
-  throw new Error("Rate limited after 5 retries");
+    throw new Error(`${cfg.name} rate limited after 6 retries`);
+  });
+
+  return q.chain;
 }
 
 function hs(m, err){
@@ -622,9 +640,15 @@ function setProgress(pct, msg){
 /* -- SOL price history via DexPaprika SOL/USDC pool -- */
 const SOL_USDC_POOL = "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2";
 
+function dexHeaders(){
+  return CONFIG.DEXPAPRIKA_KEY
+    ? { "Authorization": CONFIG.DEXPAPRIKA_KEY }
+    : undefined;
+}
+
 async function fetchSolHistory(fromMs, toMs){
   const cached = cacheGet(CACHE_KEY.sol, 6*60*60*1000);
-  if(cached && cached.from <= fromMs && cached.to >= toMs && cached.prices.length) {
+  if(cached && cached.from <= fromMs && cached.to >= toMs && cached.prices.length){
     return cached.prices;
   }
 
@@ -632,7 +656,7 @@ async function fetchSolHistory(fromMs, toMs){
   const endSec   = Math.floor(Math.min(toMs, Date.now())/1000);
   const url = `${DEXPAPRIKA}/networks/solana/pools/${SOL_USDC_POOL}/ohlcv`
             + `?start=${startSec}&end=${endSec}&interval=24h&limit=1000`;
-  const j = await fj(url, dexHeaders());
+  const j = await queueFetch(url, dexHeaders());
   const prices = [];
   if(j && Array.isArray(j)){
     for(const c of j){
@@ -668,18 +692,13 @@ async function fetchSolSpot(){
   try{
     const url = `${DEXPAPRIKA}/networks/solana/pools/${SOL_USDC_POOL}/ohlcv`
               + `?start=${Math.floor(Date.now()/1000)-86400}&interval=1h&limit=1`;
-    const j = await fj(url, dexHeaders());
+    const j = await queueFetch(url, dexHeaders());
     if(j && j.length) return +j[j.length-1].close;
   }catch(e){}
   return 150;
 }
-function dexHeaders(){
-  return CONFIG.DEXPAPRIKA_KEY
-    ? { "Authorization": CONFIG.DEXPAPRIKA_KEY }
-    : undefined;
-}
 
-/* -- Fetch all transactions (Helius, paced by global limiter) -- */
+/* -- Fetch all transactions (Helius, serialized via queue) -- */
 async function fetchAllTxs(wallet, maxPages, onProgress){
   const all = [];
   let before = "";
@@ -688,12 +707,11 @@ async function fetchAllTxs(wallet, maxPages, onProgress){
     const url = `${HELIUS_API}/addresses/${wallet}/transactions`
               + `?api-key=${encodeURIComponent(CONFIG.HELIUS_KEY)}`
               + `&limit=100` + (before ? `&before=${before}` : "");
-    const txs = await fj(url);
+    const txs = await queueFetch(url);
     if(!Array.isArray(txs) || !txs.length) break;
     for(const tx of txs) all.push(tx);
     before = txs[txs.length-1].signature;
     if(txs.length < 100) break;
-    // fj() already paces via HOST_LIMITS — no extra sleep needed
   }
   all.sort((a,b)=>a.timestamp - b.timestamp);
   return all;
@@ -792,7 +810,7 @@ async function fetchMarketData(mintsArr, maxAth, onProgress){
   for(let i = 0; i < toFetch.length; i += 30){
     const slice = toFetch.slice(i, i+30);
     try{
-      const arr = await fj("https://api.dexscreener.com/tokens/v1/solana/" + slice.join(","));
+      const arr = await queueFetch("https://api.dexscreener.com/tokens/v1/solana/" + slice.join(","));
       for(const pr of arr || []){
         const m = pr.baseToken.address, l = (pr.liquidity && pr.liquidity.usd) || 0;
         if(!info[m] || l > info[m].liq){
@@ -807,17 +825,13 @@ async function fetchMarketData(mintsArr, maxAth, onProgress){
         }
       }
     }catch(e){}
-    // DexScreener paced by global limiter
   }
   mergeCache(CACHE_KEY.dex, info);
 
-  // Rank by trade activity (spent + proceeds) so top-N ATH lookups hit the tokens that matter
+  // Rank by liquidity so ATH lookups hit tokens that matter
   const ranked = mintsArr
     .filter(m => info[m] && info[m].pair)
-    .sort((a,b) => {
-      const sa = (info[a].liq||0), sb = (info[b].liq||0);
-      return sb - sa;
-    })
+    .sort((a,b) => (info[b].liq||0) - (info[a].liq||0))
     .slice(0, maxAth);
 
   let done = 0;
@@ -830,7 +844,7 @@ async function fetchMarketData(mintsArr, maxAth, onProgress){
       const start = Math.floor(Date.now()/1000) - (365*24*3600);
       const url = `${DEXPAPRIKA}/networks/solana/pools/${inf.pair}/ohlcv`
                 + `?start=${start}&interval=24h&limit=366`;
-      const j = await fj(url, dexHeaders());
+      const j = await queueFetch(url, dexHeaders());
       if(j && Array.isArray(j) && j.length){
         inf.ath = Math.max(inf.price, ...j.map(c => +c.high));
       } else {
@@ -843,7 +857,6 @@ async function fetchMarketData(mintsArr, maxAth, onProgress){
     }
     athCache[inf.pair] = inf.ath;
     done++;
-    // fj() handles pacing
   }
   cacheSet(CACHE_KEY.ath, athCache);
   return info;
@@ -962,7 +975,11 @@ $('scan').onclick = async () => {
     hs(`Scanned ${txs.length} txs (${depth.label} depth). ATH via DexPaprika OHLCV. Cost basis FIFO, USD converted at trade-time SOL price.`);
   }catch(e){
     console.error(e);
-    hs("Scan failed: " + e.message + (e.message.includes("Rate limited") ? " — try a lower depth or wait 60s." : ""), true);
+    const msg = e.message || "unknown error";
+    const hint = msg.includes("rate limited")
+      ? " — try a lower depth or wait 60s before retrying."
+      : "";
+    hs("Scan failed: " + msg + hint, true);
     setProgress(null);
   }
   $('scan').disabled = false;
